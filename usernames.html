@@ -175,7 +175,7 @@ function generate(){
   $("status").textContent="";
   renderTabs();renderList();
 }
-const WHY={rate_limited:"حد الطلبات",login_wall:"المنصة حاظرة السيرفر",unclear:"رد غير واضح",network:"تعذّر الوصول للسيرفر",unknown:"غير معروف",bad_response:"رد غير متوقع"};
+const WHY={rate_limited:"حد الطلبات",login_wall:"المنصة حاظرة السيرفر",unclear:"رد غير واضح",network:"تعذّر الوصول للسيرفر",unknown:"غير معروف",bad_response:"رد غير متوقع",no_csrf:"تعذّر جلب رمز إنستغرام"};
 function renderList(){
   const only=$("onlyOk").checked;
   const rows=data[plat].filter(r=>!only||r.st==="ok");
