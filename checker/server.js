@@ -13,6 +13,7 @@ const RULE = /^(?!.*\.\.)[a-z0-9_.]{2,32}$/;
 let GAP = 300;      // فاصل بين بدايات الطلبات (ملّي ثانية)، يتكيّف تلقائيًا
 let okStreak = 0;
 let nextStart = 0;
+let cooldownUntil = 0;
 
 // يرجع true = متاح، false = مأخوذ، ويرمي خطأ إذا ما قدر يتأكد
 async function checkDiscord(u, tries = 0) {
@@ -22,26 +23,27 @@ async function checkDiscord(u, tries = 0) {
     body: JSON.stringify({ username: u }),
   });
   if (r.status === 429) {
-    GAP = Math.min(GAP * 2, 3000); okStreak = 0;
     const j = await r.json().catch(() => ({}));
-    if (tries < 2) {
-      const w = Math.min(j.retry_after || 2, 10) * 1000;
-      nextStart = Math.max(nextStart, Date.now() + w); // نوقف الباقي أيضًا طول المدة
-      await sleep(w); // ننتظر المدة اللي يطلبها ديسكورد ونعيد
+    const ra = Math.max(1, Number(j.retry_after) || 2) * 1000;
+    cooldownUntil = Math.max(cooldownUntil, Date.now() + ra); // نوقف كل الطلبات مؤقتًا
+    nextStart = Math.max(nextStart, cooldownUntil);
+    GAP = Math.min(GAP * 2, 2000);
+    if (tries < 3 && ra <= 15000) {
+      await sleep(ra + Math.random() * 300);
       return checkDiscord(u, tries + 1);
     }
-    throw new Error("rate_limited");
+    const e = new Error("rate_limited"); e.retryAfter = Math.ceil(ra / 1000); throw e;
   }
   if (!r.ok) throw new Error("http_" + r.status);
   const j = await r.json();
   if (typeof j.taken !== "boolean") throw new Error("bad_response");
-  if (++okStreak % 20 === 0) GAP = Math.max(300, Math.round(GAP * 0.8));
+  GAP = Math.max(300, Math.round(GAP * 0.85)); // يرجع يسرّع تدريجيًا بعد كل نجاح
   return !j.taken;
 }
 
 // جدولة: كل طلب يحجز موعد بدء (بفاصل GAP)، والطلبات تتداخل بدل ما تنتظر بعضها
 async function run(fn) {
-  const startAt = Math.max(Date.now(), nextStart);
+  const startAt = Math.max(Date.now(), nextStart, cooldownUntil);
   nextStart = startAt + GAP;
   const wait = startAt - Date.now();
   if (wait > 0) await sleep(wait);
@@ -94,6 +96,6 @@ http.createServer(async (req, res) => {
     const available = await run(() => checkDiscord(username));
     send(res, 200, { available, confidence: "high" });
   } catch (e) {
-    send(res, 200, { available: null, error: e.message });
+    send(res, 200, { available: null, error: e.message, retry_after: e.retryAfter });
   }
 }).listen(PORT, () => console.log("discord checker on " + PORT));

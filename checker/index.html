@@ -132,21 +132,34 @@ function makeName(){
 }
 function api(){return $("api").value.trim()||"/check";}
 
-// فحص يوزر واحد مع إعادة محاولة صامتة
+// فحص يوزر واحد: ما نستسلم عند حد الطلبات، ننتظر ونكمل
+let pauseUntil=0;
 async function checkOne(u){
-  for(let t=0;t<4;t++){
+  let hard=0;
+  while(hard<4){
+    if(stop)return "skip";
+    const w=pauseUntil-Date.now();
+    if(w>0){await sleep(w);if(stop)return "skip";}
     try{
       const res=await fetch(api(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});
       const j=await res.json();
       if(j.available===true)return "ok";
       if(j.available===false)return "taken";
       lastWhy=why(j.error||"bad_response");
+      if(j.error==="rate_limited"){
+        pauseUntil=Math.max(pauseUntil,Date.now()+Math.max(3,j.retry_after||5)*1000);
+        continue; // حد الطلبات ليس فشلًا: ننتظر ثم نعيد
+      }
     }catch(e){lastWhy=why("network");}
-    if(stop)return "skip";
-    await sleep(1000*(t+1));
+    hard++;
+    await sleep(1000*hard);
   }
   return "fail";
 }
+setInterval(()=>{
+  const w=Math.ceil((pauseUntil-Date.now())/1000);
+  if(running&&w>0)$("status").textContent="ديسكورد طلب الانتظار "+w+" ثانية، وراح يكمّل الفحص تلقائيًا…";
+},500);
 function render(){
   const el=$("list");el.innerHTML="";
   const only=$("onlyOk").checked;
@@ -157,11 +170,11 @@ function render(){
     const l=LAB[r.st];
     const d=document.createElement("div");d.className="it"+(r.st==="ok"?"":" no");
     if(r.st==="ok"){d.title="اضغط للنسخ";d.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(r.u).catch(()=>{});}
-    d.innerHTML='<span class="mono">'+r.u+'</span><span class="tag '+l[1]+'">'+l[0]+'</span>';
+    d.innerHTML='<span class="mono">'+r.u+'</span><span class="tag '+l[1]+'"'+(r.st==="fail"&&lastWhy?' title="'+lastWhy+'"':'')+'>'+l[0]+'</span>';
     el.appendChild(d);
   });
 }
-const CONC=4; // عدد الفحوصات المتزامنة
+const CONC=3; // عدد الفحوصات المتزامنة
 function rate(st){const s=(Date.now()-st.t0)/1000;return s>2?" · السرعة "+(st.checked/s).toFixed(1)+" اسم/ث":"";}
 async function worker(next,st,done){
   while(!stop&&!st.end){
