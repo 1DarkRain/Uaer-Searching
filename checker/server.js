@@ -10,6 +10,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // قواعد يوزر ديسكورد: 2-32 خانة، حروف صغيرة وأرقام و _ و . ولا نقطتين متتاليتين
 const RULE = /^(?!.*\.\.)[a-z0-9_.]{2,32}$/;
 
+let GAP = 300;      // فاصل بين بدايات الطلبات (ملّي ثانية)، يتكيّف تلقائيًا
+let okStreak = 0;
+let nextStart = 0;
+
 // يرجع true = متاح، false = مأخوذ، ويرمي خطأ إذا ما قدر يتأكد
 async function checkDiscord(u, tries = 0) {
   const r = await fetch("https://discord.com/api/v9/unique-username/username-attempt-unauthed", {
@@ -21,7 +25,9 @@ async function checkDiscord(u, tries = 0) {
     GAP = Math.min(GAP * 2, 3000); okStreak = 0;
     const j = await r.json().catch(() => ({}));
     if (tries < 2) {
-      await sleep(Math.min(j.retry_after || 2, 10) * 1000); // ننتظر المدة اللي يطلبها ديسكورد ونعيد
+      const w = Math.min(j.retry_after || 2, 10) * 1000;
+      nextStart = Math.max(nextStart, Date.now() + w); // نوقف الباقي أيضًا طول المدة
+      await sleep(w); // ننتظر المدة اللي يطلبها ديسكورد ونعيد
       return checkDiscord(u, tries + 1);
     }
     throw new Error("rate_limited");
@@ -33,19 +39,13 @@ async function checkDiscord(u, tries = 0) {
   return !j.taken;
 }
 
-// طابور واحد مع فاصل زمني عشان ما يوقفك ديسكورد
-let GAP = 300;      // يتكيّف تلقائيًا: يبطّئ إذا ديسكورد اشتكى ويسرّع إذا ارتاح
-let okStreak = 0;
-let last = 0;
-let chain = Promise.resolve();
-function run(fn) {
-  const job = chain.then(async () => {
-    const wait = Math.max(0, last + GAP - Date.now());
-    if (wait) await sleep(wait);
-    try { return await fn(); } finally { last = Date.now(); }
-  });
-  chain = job.catch(() => {});
-  return job;
+// جدولة: كل طلب يحجز موعد بدء (بفاصل GAP)، والطلبات تتداخل بدل ما تنتظر بعضها
+async function run(fn) {
+  const startAt = Math.max(Date.now(), nextStart);
+  nextStart = startAt + GAP;
+  const wait = startAt - Date.now();
+  if (wait > 0) await sleep(wait);
+  return fn();
 }
 
 function send(res, code, obj) {
