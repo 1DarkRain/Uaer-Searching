@@ -39,6 +39,11 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .it{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg);cursor:pointer}
 .it .mono{font-size:18px;font-weight:600}
 .tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--okbg);color:var(--ok)}
+.tag.no{background:var(--line);color:var(--mut)}
+.tag.err{background:#fdeede;color:#b4561a}
+.it.no .mono{color:var(--mut);font-weight:500}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--mut);margin-bottom:10px}
+.chk input{width:auto}
 .empty{color:var(--mut);text-align:center;padding:22px 8px;grid-column:1/-1}
 textarea{resize:vertical}
 details{font-size:14px;color:var(--mut)}
@@ -73,6 +78,7 @@ details summary{cursor:pointer;color:var(--ink);font-weight:500}
   <div class="panel">
     <div class="bar"><i id="prog"></i></div>
     <div id="status"></div>
+    <label class="chk"><input type="checkbox" id="onlyOk"> إظهار المتاح فقط</label>
     <div class="list" id="list"></div>
     <div class="actions"><button class="btn sec" id="copyAll">نسخ الكل</button></div>
   </div>
@@ -100,7 +106,7 @@ const L="abcdefghijklmnopqrstuvwxyz".split(""),D="0123456789".split("");
 const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
-let pat=PATS[1],running=false,stop=false,found=[],lastWhy="";
+let pat=PATS[1],running=false,stop=false,found=[],rows=[],lastWhy="";
 const WHY={rate_limited:"ديسكورد أوقف الطلبات مؤقتًا (حد الطلبات)",network:"الصفحة ما قدرت توصل للسيرفر",bad_response:"ديسكورد رجّع رد غير متوقع",bad_json:"طلب غير صالح"};
 function why(c){return WHY[c]||(/^http_/.test(c)?"ديسكورد رفض الطلب ("+c.replace("http_","")+")":c);}
 
@@ -143,17 +149,21 @@ async function checkOne(u){
 }
 function render(){
   const el=$("list");el.innerHTML="";
-  if(!found.length){el.innerHTML='<div class="empty">النتائج تظهر هنا.</div>';return;}
-  found.forEach(u=>{
-    const d=document.createElement("div");d.className="it";d.title="اضغط للنسخ";
-    d.innerHTML='<span class="mono">'+u+'</span><span class="tag">متاح</span>';
-    d.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(u).catch(()=>{});
+  const only=$("onlyOk").checked;
+  const list=(only?rows.filter(r=>r.st==="ok"):rows).slice(-200).reverse();
+  if(!list.length){el.innerHTML='<div class="empty">'+(rows.length?"لا يوجد متاح بعد.":"النتائج تظهر هنا.")+'</div>';return;}
+  const LAB={busy:["جارٍ الفحص…","no"],ok:["متاح","" ],taken:["غير متاح","no"],fail:["تعذّر الفحص","err"],skip:["أُوقف","no"]};
+  list.forEach(r=>{
+    const l=LAB[r.st];
+    const d=document.createElement("div");d.className="it"+(r.st==="ok"?"":" no");
+    if(r.st==="ok"){d.title="اضغط للنسخ";d.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(r.u).catch(()=>{});}
+    d.innerHTML='<span class="mono">'+r.u+'</span><span class="tag '+l[1]+'">'+l[0]+'</span>';
     el.appendChild(d);
   });
 }
 async function search(){
   if(running){stop=true;$("go").textContent="جارٍ الإيقاف…";return;}
-  running=true;stop=false;found=[];
+  running=true;stop=false;found=[];rows=[];
   const want=Math.max(1,Math.min(100,+$("cnt").value||10)),max=want*150;
   const seen=new Set();let checked=0,fails=0,dups=0,end="";
   $("go").textContent="إيقاف";$("go2").disabled=true;render();
@@ -163,7 +173,7 @@ async function search(){
     seen.add(u);
     $("status").textContent="جارٍ الفحص… فُحص "+checked+" · وُجد "+found.length+" من "+want;
     $("prog").style.width=Math.round(found.length/want*100)+"%";
-    const r=await checkOne(u);
+    const row={u,st:"busy"};rows.push(row);render();const r=await checkOne(u);row.st=r==="ok"?"ok":r==="taken"?"taken":r==="skip"?"skip":"fail";render();
     if(r==="ok"){found.push(u);fails=0;render();}
     else if(r==="taken"){fails=0;}
     else if(r==="fail"){if(++fails>=3){end="fail";break;}}
@@ -183,14 +193,14 @@ async function checkList(){
   if(running){stop=true;return;}
   const names=[...new Set($("own").value.toLowerCase().split(/[\s,،;]+/).filter(Boolean))].filter(u=>/^(?!.*\.\.)[a-z0-9_.]{2,32}$/.test(u));
   if(!names.length){$("status").textContent="اكتب أسماء صالحة: حروف إنجليزية صغيرة وأرقام و _ و . فقط، من 2 إلى 32 خانة.";return;}
-  running=true;stop=false;found=[];render();
+  running=true;stop=false;found=[];rows=[];render();
   $("go2").textContent="إيقاف";$("go").disabled=true;
   let i=0,fails=0,broke=false;
   for(const u of names){
     if(stop)break;
     $("status").textContent="جارٍ الفحص… "+i+" من "+names.length+" · وُجد "+found.length;
     $("prog").style.width=Math.round(i/names.length*100)+"%";
-    const r=await checkOne(u);
+    const row={u,st:"busy"};rows.push(row);render();const r=await checkOne(u);row.st=r==="ok"?"ok":r==="taken"?"taken":r==="skip"?"skip":"fail";render();
     if(r==="ok"){found.push(u);fails=0;render();}
     else if(r==="fail"){if(++fails>=3){broke=true;break;}}
     else fails=0;
@@ -204,6 +214,7 @@ async function checkList(){
 }
 $("go").onclick=search;
 $("go2").onclick=checkList;
+$("onlyOk").onchange=render;
 $("copyAll").onclick=()=>{
   if(found.length&&navigator.clipboard)navigator.clipboard.writeText(found.join("\n")).then(()=>{$("status").textContent="تم نسخ "+found.length+" يوزر.";}).catch(()=>{});
 };
