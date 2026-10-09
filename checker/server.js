@@ -18,6 +18,7 @@ async function checkDiscord(u, tries = 0) {
     body: JSON.stringify({ username: u }),
   });
   if (r.status === 429) {
+    GAP = Math.min(GAP * 2, 3000); okStreak = 0;
     const j = await r.json().catch(() => ({}));
     if (tries < 2) {
       await sleep(Math.min(j.retry_after || 2, 10) * 1000); // ننتظر المدة اللي يطلبها ديسكورد ونعيد
@@ -28,11 +29,13 @@ async function checkDiscord(u, tries = 0) {
   if (!r.ok) throw new Error("http_" + r.status);
   const j = await r.json();
   if (typeof j.taken !== "boolean") throw new Error("bad_response");
+  if (++okStreak % 20 === 0) GAP = Math.max(300, Math.round(GAP * 0.8));
   return !j.taken;
 }
 
 // طابور واحد مع فاصل زمني عشان ما يوقفك ديسكورد
-const GAP = 1000;
+let GAP = 300;      // يتكيّف تلقائيًا: يبطّئ إذا ديسكورد اشتكى ويسرّع إذا ارتاح
+let okStreak = 0;
 let last = 0;
 let chain = Promise.resolve();
 function run(fn) {
