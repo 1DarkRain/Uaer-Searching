@@ -91,7 +91,9 @@ const L="abcdefghijklmnopqrstuvwxyz".split(""),D="0123456789".split("");
 const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
-let pat=PATS[1],running=false,stop=false,found=[];
+let pat=PATS[1],running=false,stop=false,found=[],lastWhy="";
+const WHY={rate_limited:"ديسكورد أوقف الطلبات مؤقتًا (حد الطلبات)",network:"الصفحة ما قدرت توصل للسيرفر",bad_response:"ديسكورد رجّع رد غير متوقع",bad_json:"طلب غير صالح"};
+function why(c){return WHY[c]||(/^http_/.test(c)?"ديسكورد رفض الطلب ("+c.replace("http_","")+")":c);}
 
 function renderPats(){
   $("pats").innerHTML="";
@@ -123,7 +125,8 @@ async function checkOne(u){
       const j=await res.json();
       if(j.available===true)return "ok";
       if(j.available===false)return "taken";
-    }catch(e){}
+      lastWhy=why(j.error||"bad_response");
+    }catch(e){lastWhy=why("network");}
     if(stop)return "skip";
     await sleep(2000*(t+1));
   }
@@ -161,7 +164,7 @@ async function search(){
   let msg="";
   if(found.length>=want)msg="تم! لقيت "+found.length+" يوزر متاح بعد فحص "+checked+".";
   else if(stop)msg="تم الإيقاف. وُجد "+found.length+" بعد فحص "+checked+".";
-  else if(end==="fail")msg="السيرفر أو ديسكورد ما يرد حاليًا. انتظر دقيقة ثم اضغط «ابحث» مرة ثانية. (وُجد "+found.length+")";
+  else if(end==="fail")msg="ما قدرت أفحص. السبب: "+(lastWhy||"غير معروف")+". انتظر دقيقة ثم اضغط «ابحث» مرة ثانية.";
   else if(end==="dups")msg="ما بقي أسماء جديدة بهذا النمط. وُجد "+found.length+".";
   else msg="فحصت "+checked+" اسم ولقيت "+found.length+" فقط. هذا النمط شبه محجوز، جرّب نمطًا آخر.";
   $("status").textContent=msg;

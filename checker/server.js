@@ -62,6 +62,17 @@ try { PAGE = fs.readFileSync(path.join(__dirname, "index.html"), "utf8"); } catc
 http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
   if (req.method === "GET") {
+    if (req.url.startsWith("/debug")) {
+      const u = (new URL(req.url, "http://x").searchParams.get("username") || "abcd12").toLowerCase();
+      try {
+        const r = await fetch("https://discord.com/api/v9/unique-username/username-attempt-unauthed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "User-Agent": UA },
+          body: JSON.stringify({ username: u }),
+        });
+        return send(res, 200, { username: u, status: r.status, body: (await r.text()).slice(0, 600) });
+      } catch (e) { return send(res, 200, { username: u, error: String(e && e.cause ? e.cause.code || e.cause.message : e.message) }); }
+    }
     if (req.url === "/health" || !PAGE) return send(res, 200, { ok: true });
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(PAGE);
