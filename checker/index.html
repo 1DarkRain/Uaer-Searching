@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>صيّاد يوزرات ديسكورد</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f4f8;--card:#fff;--ink:#14213d;--mut:#5d6b85;--line:#d8deea;--acc:#3a3adf;--accfg:#fff;--ok:#0e8a54;--okbg:#dff5ea;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10162a;--card:#1a2240;--ink:#eef1fa;--mut:#9aa7c7;--line:#2d3860;--acc:#8c8cff;--accfg:#10162a;--ok:#5fe0a3;--okbg:#12382b}}
+:root[data-theme="dark"]{--bg:#10162a;--card:#1a2240;--ink:#eef1fa;--mut:#9aa7c7;--line:#2d3860;--acc:#8c8cff;--accfg:#10162a;--ok:#5fe0a3;--okbg:#12382b}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif;font-size:16px;line-height:1.6}
+.wrap{max-width:720px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:34px;font-weight:800;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 22px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;direction:ltr;unicode-bidi:isolate}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.lbl{font-weight:500;color:var(--mut);font-size:14px;margin:0 0 8px;display:block}
+.pats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px}
+.pat{border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:12px;padding:12px 4px 8px;cursor:pointer;font-family:inherit;text-align:center}
+.pat .ex{display:block;font-size:22px;font-weight:600}
+.pat .nm{display:block;font-size:13px;color:var(--mut);margin-top:2px}
+.pat[aria-pressed="true"]{border-color:var(--acc);background:var(--acc)}
+.pat[aria-pressed="true"] .ex,.pat[aria-pressed="true"] .nm{color:var(--accfg)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1;min-width:130px}
+select,input{width:100%;font-family:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.btn{font-family:inherit;font-size:17px;font-weight:500;border:0;border-radius:10px;padding:12px 22px;cursor:pointer;background:var(--acc);color:var(--accfg)}
+.btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:4px 0 10px}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+#status{color:var(--mut);font-size:15px;min-height:24px;margin-bottom:10px}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.it{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg);cursor:pointer}
+.it .mono{font-size:18px;font-weight:600}
+.tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--okbg);color:var(--ok)}
+.empty{color:var(--mut);text-align:center;padding:22px 8px;grid-column:1/-1}
+details{font-size:14px;color:var(--mut)}
+details summary{cursor:pointer;color:var(--ink);font-weight:500}
+@media(max-width:520px){.pats{grid-template-columns:repeat(3,1fr)}h1{font-size:28px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>صيّاد يوزرات ديسكورد</h1>
+  <p class="sub">اختر النمط وعدد اليوزرات اللي تبيها، والموقع يولّد ويفحص لين يلقى لك المتاح.</p>
+
+  <div class="panel">
+    <span class="lbl">نوع اليوزر</span>
+    <div class="pats" id="pats"></div>
+    <div class="row">
+      <div><label class="lbl" for="cs">الأحرف</label>
+        <select id="cs"><option value="l">حروف فقط</option><option value="d">أرقام فقط</option><option value="m" selected>حروف وأرقام</option></select></div>
+      <div><label class="lbl" for="sep">الفاصل (للشبه)</label>
+        <select id="sep"><option value="any">أي فاصل</option><option value=".">نقطة .</option><option value="_">شرطة سفلية _</option></select></div>
+      <div><label class="lbl" for="cnt">كم يوزر متاح تبي؟</label><input id="cnt" type="number" min="1" max="100" value="10"></div>
+    </div>
+    <div class="actions"><button class="btn" id="go">ابحث عن المتاح</button></div>
+  </div>
+
+  <div class="panel">
+    <div class="bar"><i id="prog"></i></div>
+    <div id="status"></div>
+    <div class="list" id="list"></div>
+    <div class="actions"><button class="btn sec" id="copyAll">نسخ الكل</button></div>
+  </div>
+
+  <div class="panel">
+    <details>
+      <summary>إعدادات متقدمة</summary>
+      <p>إذا فتحت الموقع من رابط السيرفر نفسه فلا تحتاج تغيّر شيئًا. غيّر الخانة فقط إذا كان سيرفر الفحص على رابط آخر.</p>
+      <input id="api" class="mono" placeholder="/check">
+    </details>
+  </div>
+</div>
+
+<script>
+const PATS=[
+  {n:3,s:false,ex:"abc",nm:"ثلاثي"},
+  {n:3,s:true,ex:"a.bc",nm:"شبه رباعي"},
+  {n:4,s:false,ex:"abcd",nm:"رباعي"},
+  {n:4,s:true,ex:"a.bcd",nm:"شبه خماسي"},
+  {n:5,s:false,ex:"abcde",nm:"خماسي"}
+];
+const L="abcdefghijklmnopqrstuvwxyz".split(""),D="0123456789".split("");
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+let pat=PATS[1],running=false,stop=false,found=[];
+
+function renderPats(){
+  $("pats").innerHTML="";
+  PATS.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="pat";b.setAttribute("aria-pressed",p===pat);
+    b.innerHTML='<span class="ex mono">'+p.ex+'</span><span class="nm">'+p.nm+'</span>';
+    b.onclick=()=>{if(running)return;pat=p;renderPats();};
+    $("pats").appendChild(b);
+  });
+}
+function makeName(){
+  const cs=$("cs").value,sc=$("sep").value;
+  const pool=cs==="l"?L:cs==="d"?D:L.concat(D);
+  const ch=[];for(let i=0;i<pat.n;i++)ch.push(rnd(pool));
+  if(pat.s){
+    const sep=sc==="any"?rnd([".","_"]):sc;
+    ch.splice(1+Math.floor(Math.random()*(pat.n-1)),0,sep);
+  }
+  return ch.join("");
+}
+function api(){return $("api").value.trim()||"/check";}
+
+// فحص يوزر واحد مع إعادة محاولة صامتة
+async function checkOne(u){
+  for(let t=0;t<4;t++){
+    try{
+      const res=await fetch(api(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});
+      const j=await res.json();
+      if(j.available===true)return "ok";
+      if(j.available===false)return "taken";
+    }catch(e){}
+    if(stop)return "skip";
+    await sleep(2000*(t+1));
+  }
+  return "fail";
+}
+function render(){
+  const el=$("list");el.innerHTML="";
+  if(!found.length){el.innerHTML='<div class="empty">النتائج تظهر هنا.</div>';return;}
+  found.forEach(u=>{
+    const d=document.createElement("div");d.className="it";d.title="اضغط للنسخ";
+    d.innerHTML='<span class="mono">'+u+'</span><span class="tag">متاح</span>';
+    d.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(u).catch(()=>{});
+    el.appendChild(d);
+  });
+}
+async function search(){
+  if(running){stop=true;$("go").textContent="جارٍ الإيقاف…";return;}
+  running=true;stop=false;found=[];
+  const want=Math.max(1,Math.min(100,+$("cnt").value||10)),max=want*80;
+  const seen=new Set();let checked=0,fails=0,dups=0,end="";
+  $("go").textContent="إيقاف";render();
+  while(found.length<want&&checked<max&&!stop){
+    const u=makeName();
+    if(seen.has(u)){if(++dups>300){end="dups";break;}continue;}
+    seen.add(u);
+    $("status").textContent="جارٍ الفحص… فُحص "+checked+" · وُجد "+found.length+" من "+want;
+    $("prog").style.width=Math.round(found.length/want*100)+"%";
+    const r=await checkOne(u);
+    if(r==="ok"){found.push(u);fails=0;render();}
+    else if(r==="taken"){fails=0;}
+    else if(r==="fail"){if(++fails>=3){end="fail";break;}}
+    checked++;
+  }
+  $("prog").style.width=Math.round(found.length/want*100)+"%";
+  let msg="";
+  if(found.length>=want)msg="تم! لقيت "+found.length+" يوزر متاح بعد فحص "+checked+".";
+  else if(stop)msg="تم الإيقاف. وُجد "+found.length+" بعد فحص "+checked+".";
+  else if(end==="fail")msg="السيرفر أو ديسكورد ما يرد حاليًا. انتظر دقيقة ثم اضغط «ابحث» مرة ثانية. (وُجد "+found.length+")";
+  else if(end==="dups")msg="ما بقي أسماء جديدة بهذا النمط. وُجد "+found.length+".";
+  else msg="فحصت "+checked+" اسم ولقيت "+found.length+" فقط. هذا النمط شبه محجوز، جرّب نمطًا آخر.";
+  $("status").textContent=msg;
+  running=false;stop=false;$("go").textContent="ابحث عن المتاح";
+}
+$("go").onclick=search;
+$("copyAll").onclick=()=>{
+  if(found.length&&navigator.clipboard)navigator.clipboard.writeText(found.join("\n")).then(()=>{$("status").textContent="تم نسخ "+found.length+" يوزر.";}).catch(()=>{});
+};
+renderPats();render();
+</script>
+</body>
+</html>

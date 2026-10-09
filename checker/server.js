@@ -1,66 +1,47 @@
-// سيرفر فحص اليوزرات - Node.js 18+ بدون أي مكتبات
+// سيرفر فحص يوزرات ديسكورد + يقدّم صفحة الموقع نفسها - Node.js 18+ بدون أي مكتبات
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const PORT = process.env.PORT || 8080;
 const ORIGIN = process.env.ALLOWED_ORIGIN || "*"; // ضع رابط موقعك هنا لحمايته
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const RULES = {
-  discord: /^(?!.*\.\.)[a-z0-9_.]{2,32}$/,
-  instagram: /^[a-z0-9._]{1,30}$/,
-  snapchat: /^[a-z][a-z0-9._-]{1,13}[a-z0-9]$/,
-};
+// قواعد يوزر ديسكورد: 2-32 خانة، حروف صغيرة وأرقام و _ و . ولا نقطتين متتاليتين
+const RULE = /^(?!.*\.\.)[a-z0-9_.]{2,32}$/;
 
 // يرجع true = متاح، false = مأخوذ، ويرمي خطأ إذا ما قدر يتأكد
-const checkers = {
-  async discord(u) {
-    const r = await fetch("https://discord.com/api/v9/unique-username/username-attempt-unauthed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": UA },
-      body: JSON.stringify({ username: u }),
-    });
-    if (r.status === 429) throw new Error("rate_limited");
-    if (!r.ok) throw new Error("http_" + r.status);
-    const j = await r.json();
-    if (typeof j.taken !== "boolean") throw new Error("bad_response");
-    return !j.taken;
-  },
-  async snapchat(u) {
-    const r = await fetch("https://www.snapchat.com/add/" + encodeURIComponent(u), {
-      headers: { "User-Agent": UA, "Accept-Language": "en" },
-    });
-    if (r.status === 404) return true;
-    if (r.status === 200) return false;
-    if (r.status === 429) throw new Error("rate_limited");
-    throw new Error("http_" + r.status);
-  },
-  async instagram(u) {
-    const r = await fetch("https://www.instagram.com/" + encodeURIComponent(u) + "/", {
-      headers: { "User-Agent": UA, "Accept-Language": "en" },
-    });
-    if (r.status === 404) return true;
-    if (r.status === 429) throw new Error("rate_limited");
-    if (r.status === 200) {
-      if (r.url.includes("/accounts/login")) throw new Error("login_wall");
-      const t = (await r.text()).toLowerCase();
-      if (t.includes("(@" + u + ")")) return false;
-      throw new Error("unclear");
-    }
-    throw new Error("http_" + r.status);
-  },
-};
-
-// طابور لكل منصة مع فاصل زمني عشان ما ينحظر السيرفر
-const gap = { discord: 1000, instagram: 2500, snapchat: 800 };
-const last = {};
-const chain = { discord: Promise.resolve(), instagram: Promise.resolve(), snapchat: Promise.resolve() };
-function run(p, fn) {
-  const job = chain[p].then(async () => {
-    const wait = Math.max(0, (last[p] || 0) + gap[p] - Date.now());
-    if (wait) await sleep(wait);
-    try { return await fn(); } finally { last[p] = Date.now(); }
+async function checkDiscord(u, tries = 0) {
+  const r = await fetch("https://discord.com/api/v9/unique-username/username-attempt-unauthed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": UA },
+    body: JSON.stringify({ username: u }),
   });
-  chain[p] = job.catch(() => {});
+  if (r.status === 429) {
+    const j = await r.json().catch(() => ({}));
+    if (tries < 2) {
+      await sleep(Math.min(j.retry_after || 2, 10) * 1000); // ننتظر المدة اللي يطلبها ديسكورد ونعيد
+      return checkDiscord(u, tries + 1);
+    }
+    throw new Error("rate_limited");
+  }
+  if (!r.ok) throw new Error("http_" + r.status);
+  const j = await r.json();
+  if (typeof j.taken !== "boolean") throw new Error("bad_response");
+  return !j.taken;
+}
+
+// طابور واحد مع فاصل زمني عشان ما يوقفك ديسكورد
+const GAP = 1000;
+let last = 0;
+let chain = Promise.resolve();
+function run(fn) {
+  const job = chain.then(async () => {
+    const wait = Math.max(0, last + GAP - Date.now());
+    if (wait) await sleep(wait);
+    try { return await fn(); } finally { last = Date.now(); }
+  });
+  chain = job.catch(() => {});
   return job;
 }
 
@@ -70,28 +51,35 @@ function send(res, code, obj) {
     "Access-Control-Allow-Origin": ORIGIN,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Private-Network": "true",
   });
   res.end(JSON.stringify(obj));
 }
 
+let PAGE = "";
+try { PAGE = fs.readFileSync(path.join(__dirname, "index.html"), "utf8"); } catch {}
+
 http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
-  if (req.method === "GET") return send(res, 200, { ok: true });
+  if (req.method === "GET") {
+    if (req.url === "/health" || !PAGE) return send(res, 200, { ok: true });
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(PAGE);
+  }
   if (req.method !== "POST") return send(res, 405, { error: "method" });
 
   let body = "";
   for await (const c of req) { body += c; if (body.length > 2000) return send(res, 413, { error: "too_big" }); }
-  let platform, username;
-  try { ({ platform, username } = JSON.parse(body)); } catch { return send(res, 400, { error: "bad_json" }); }
+  let username;
+  try { ({ username } = JSON.parse(body)); } catch { return send(res, 400, { error: "bad_json" }); }
 
   username = String(username || "").toLowerCase();
-  if (!checkers[platform]) return send(res, 400, { error: "bad_platform" });
-  if (!RULES[platform].test(username)) return send(res, 200, { available: false, reason: "invalid_for_platform" });
+  if (!RULE.test(username)) return send(res, 200, { available: false, reason: "invalid_for_discord" });
 
   try {
-    const available = await run(platform, () => checkers[platform](username));
-    send(res, 200, { available });
+    const available = await run(() => checkDiscord(username));
+    send(res, 200, { available, confidence: "high" });
   } catch (e) {
     send(res, 200, { available: null, error: e.message });
   }
-}).listen(PORT, () => console.log("checker on " + PORT));
+}).listen(PORT, () => console.log("discord checker on " + PORT));
